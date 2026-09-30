@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Quranic Reflections & Video Creator</title>
+    <title>Quranic Reflections Studio</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts for Arabic & Modern Sans -->
@@ -21,6 +21,8 @@
   </head>
   <body class="bg-slate-950 text-slate-100 min-h-screen">
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- Relative path fix for GitHub Pages subfolder deployment -->
+    <script type="module" src="./src/App.jsx"></script>
   </body>
 </html>
