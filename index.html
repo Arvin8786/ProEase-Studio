@@ -8,29 +8,63 @@
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts for Arabic & Modern Sans -->
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     
-    <!-- React & Babel CDNs (Enables JSX compiling directly in browser without local software) -->
+    <!-- React & Babel CDNs -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-      body {
-        font-family: 'Inter', sans-serif;
-      }
-      .font-arabic {
-        font-family: 'Amiri', serif;
-      }
+      body { font-family: 'Inter', sans-serif; }
+      .font-arabic { font-family: 'Amiri', serif; }
     </style>
   </head>
   <body class="bg-slate-950 text-slate-100 min-h-screen">
     <div id="root"></div>
 
-    <!-- Script loaded with type="text/babel" so Babel compiles JSX on GitHub Pages -->
-    <script type="text/babel" src="./src/App.jsx"></script>
+    <script type="text/babel">
+      const { useState } = React;
+
+      function App() {
+        const [verse] = useState({
+          verse_key: '1:1',
+          text_uthmani: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
+          translation: 'In the name of Allah, the Entirely Merciful, the Especially Merciful.',
+        });
+
+        return (
+          <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4">
+            <h1 className="text-2xl font-bold mb-6">Quranic Reflections Studio</h1>
+
+            <div className="w-[300px] h-[533px] rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-800 to-slate-900 shadow-2xl flex flex-col justify-between p-6 text-center box-border">
+              <div className="text-xs font-bold px-3 py-1 rounded-full bg-white/10 self-center text-sky-400">
+                Surah Al-Fatihah : 1
+              </div>
+
+              <div>
+                <p className="text-3xl leading-relaxed mb-4 font-arabic">
+                  {verse.text_uthmani}
+                </p>
+                <p className="text-sm text-slate-300 leading-snug">
+                  {verse.translation}
+                </p>
+              </div>
+
+              <div className="text-xs p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                Reflection: Beginning with Allah's mercy
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // Render App directly to DOM
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
   </body>
 </html>
