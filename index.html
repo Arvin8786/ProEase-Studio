@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Quranic Reflections & Video Creator</title>
+    <title>Quranic Video Studio</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts for Arabic & Modern Sans -->
+    <!-- Google Fonts for Arabic & English -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     
-    <!-- React & Babel CDNs (Zero-install setup) -->
+    <!-- React & Babel CDNs -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -29,21 +29,36 @@
     <script type="text/babel">
       const { useState, useEffect, useRef } = React;
 
+      const PEXELS_API_KEY = '6mKMhZrxXlna1oHIaFYheBlevUvQ3aPRXAvaqOmqGXbEj8s9PLmLnmX2';
+
       function App() {
+        const [mode, setMode] = useState('shorts'); // 'shorts' (9:16) or 'recitation' (16:9)
         const [surahNum, setSurahNum] = useState(1);
         const [verses, setVerses] = useState([]);
-        const [selectedVerseIndex, setSelectedVerseIndex] = useState(0);
-        const [loading, setLoading] = useState(false);
+        const [loadingVerses, setLoadingVerses] = useState(false);
+        
+        // Pexels Video State
+        const [searchQuery, setSearchQuery] = useState('nature nature background');
+        const [pexelsVideos, setPexelsVideos] = useState([]);
+        const [selectedVideoUrl, setSelectedVideoUrl] = useState('');
+        const [loadingVideos, setLoadingVideos] = useState(false);
+
+        // Recording State
         const [isRecording, setIsRecording] = useState(false);
         const [recordedUrl, setRecordedUrl] = useState(null);
 
         const canvasRef = useRef(null);
+        const videoRef = useRef(null);
         const mediaRecorderRef = useRef(null);
 
-        // Fetch Verses & Translations directly from Quran API
+        // Canvas dimensions for 720p
+        const canvasWidth = mode === 'shorts' ? 720 : 1280;
+        const canvasHeight = mode === 'shorts' ? 1280 : 720;
+
+        // 1. Fetch All Verses for Selected Surah
         useEffect(() => {
-          async function fetchSurahData() {
-            setLoading(true);
+          async function fetchAllVerses() {
+            setLoadingVerses(true);
             try {
               const [arabicRes, transRes] = await Promise.all([
                 fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${surahNum}`),
@@ -61,128 +76,134 @@
               }));
 
               setVerses(combined);
-              setSelectedVerseIndex(0);
             } catch (err) {
-              console.error('Failed to fetch verses:', err);
+              console.error('Failed to load Surah verses:', err);
             } finally {
-              setLoading(false);
+              setLoadingVerses(false);
             }
           }
 
-          fetchSurahData();
+          fetchAllVerses();
         }, [surahNum]);
 
-        const currentVerse = verses[selectedVerseIndex] || {
-          verse_key: '1:1',
-          text_uthmani: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
-          translation: 'In the name of Allah, the Entirely Merciful, the Especially Merciful.'
+        // 2. Fetch Pexels Videos matching aspect ratio mode
+        const fetchPexelsVideos = async () => {
+          setLoadingVideos(true);
+          try {
+            const orientation = mode === 'shorts' ? 'portrait' : 'landscape';
+            const res = await fetch(
+              `https://api.pexels.com/videos/search?query=${encodeURIComponent(searchQuery)}&orientation=${orientation}&per_page=6`,
+              { headers: { Authorization: PEXELS_API_KEY } }
+            );
+            const data = await res.json();
+            
+            if (data.videos && data.videos.length > 0) {
+              setPexelsVideos(data.videos);
+              // Pick 720p or highest matching resolution file
+              const firstVideoFile = data.videos[0].video_files.find(f => f.height === 720 || f.width === 720) || data.videos[0].video_files[0];
+              setSelectedVideoUrl(firstVideoFile.link);
+            }
+          } catch (err) {
+            console.error('Error fetching Pexels videos:', err);
+          } finally {
+            setLoadingVideos(false);
+          }
         };
 
-        // Continuous Canvas Renderer for 9:16 Shorts Video Frame
+        useEffect(() => {
+          fetchPexelsVideos();
+        }, [mode]);
+
+        // 3. Render Canvas Loop (All Verses Overlay on Video)
         useEffect(() => {
           const canvas = canvasRef.current;
+          const bgVideo = videoRef.current;
           if (!canvas) return;
 
           const ctx = canvas.getContext('2d');
           let animationFrameId;
 
           const render = () => {
-            // Background Gradient (1080x1920 Native Resolution)
-            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            grad.addColorStop(0, '#0f172a');
-            grad.addColorStop(0.5, '#1e1b4b');
-            grad.addColorStop(1, '#020617');
-            ctx.fillStyle = grad;
+            // Draw background video if ready, else dark gradient fallback
+            if (bgVideo && bgVideo.readyState >= 2) {
+              ctx.drawImage(bgVideo, 0, 0, canvas.width, canvas.height);
+            } else {
+              const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+              grad.addColorStop(0, '#0f172a');
+              grad.addColorStop(1, '#020617');
+              ctx.fillStyle = grad;
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            // Dark semi-transparent overlay for text contrast
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Subtle Central Glow
-            const glow = ctx.createRadialGradient(
-              canvas.width / 2, canvas.height / 2, 50,
-              canvas.width / 2, canvas.height / 2, 500
-            );
-            glow.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
-            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-            ctx.fillStyle = glow;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if (verses.length > 0) {
+              ctx.fillStyle = '#ffffff';
+              ctx.textAlign = 'center';
 
-            // Dark Overlay Card Frame
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.roundRect(100, 300, 880, 1320, 32);
-            ctx.fill();
-            ctx.stroke();
+              if (mode === 'shorts') {
+                // Portrait Mode Display
+                ctx.font = 'bold 24px Inter, sans-serif';
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillText(`SURAH ${surahNum}`, canvas.width / 2, 100);
 
-            // Badge Header
-            ctx.fillStyle = '#38bdf8';
-            ctx.font = 'bold 36px Inter, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(`SURAH ${surahNum} • VERSE ${currentVerse.verse_key}`, canvas.width / 2, 420);
+                let startY = 180;
+                verses.forEach((v, idx) => {
+                  if (startY > canvas.height - 100) return; // Canvas boundary check
 
-            // Quran Arabic Text
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 64px Amiri, serif';
-            
-            // Simple Word Wrap for Long Verses
-            const words = currentVerse.text_uthmani.split(' ');
-            let line = '';
-            let y = 750;
+                  // Verse Arabic
+                  ctx.fillStyle = '#ffffff';
+                  ctx.font = 'bold 32px Amiri, serif';
+                  ctx.fillText(`${v.text_uthmani} ﴿${idx + 1}﴾`, canvas.width / 2, startY);
+                  startY += 50;
 
-            for (let n = 0; n < words.length; n++) {
-              const testLine = line + words[n] + ' ';
-              const metrics = ctx.measureText(testLine);
-              if (metrics.width > 760 && n > 0) {
-                ctx.fillText(line, canvas.width / 2, y);
-                line = words[n] + ' ';
-                y += 110;
+                  // Verse Translation
+                  ctx.fillStyle = '#cbd5e1';
+                  ctx.font = '18px Inter, sans-serif';
+                  ctx.fillText(v.translation, canvas.width / 2, startY);
+                  startY += 70;
+                });
               } else {
-                line = testLine;
+                // Landscape Mode Display (Recitation)
+                ctx.font = 'bold 28px Inter, sans-serif';
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillText(`SURAH ${surahNum}`, canvas.width / 2, 70);
+
+                let startY = 140;
+                verses.forEach((v, idx) => {
+                  if (startY > canvas.height - 60) return;
+
+                  ctx.fillStyle = '#ffffff';
+                  ctx.font = 'bold 36px Amiri, serif';
+                  ctx.fillText(`${v.text_uthmani} ﴿${idx + 1}﴾`, canvas.width / 2, startY);
+                  startY += 55;
+
+                  ctx.fillStyle = '#cbd5e1';
+                  ctx.font = '20px Inter, sans-serif';
+                  ctx.fillText(v.translation, canvas.width / 2, startY);
+                  startY += 65;
+                });
               }
             }
-            ctx.fillText(line, canvas.width / 2, y);
-
-            // English Translation Subtitle
-            ctx.fillStyle = '#cbd5e1';
-            ctx.font = '36px Inter, sans-serif';
-            const transWords = currentVerse.translation.split(' ');
-            let transLine = '';
-            let transY = y + 140;
-
-            for (let n = 0; n < transWords.length; n++) {
-              const testLine = transLine + transWords[n] + ' ';
-              const metrics = ctx.measureText(testLine);
-              if (metrics.width > 760 && n > 0) {
-                ctx.fillText(transLine, canvas.width / 2, transY);
-                transLine = transWords[n] + ' ';
-                transY += 60;
-              } else {
-                transLine = testLine;
-              }
-            }
-            ctx.fillText(transLine, canvas.width / 2, transY);
-
-            // Footer Watermark
-            ctx.fillStyle = '#fbbf24';
-            ctx.font = '28px Inter, sans-serif';
-            ctx.fillText('Quranic Reflections Studio', canvas.width / 2, 1540);
 
             animationFrameId = requestAnimationFrame(render);
           };
 
           render();
           return () => cancelAnimationFrame(animationFrameId);
-        }, [currentVerse, surahNum]);
+        }, [verses, surahNum, mode, selectedVideoUrl]);
 
-        // Browser-Native Video Recording Logic
+        // 4. Instant In-Browser MediaRecorder Export
         const startRecording = () => {
           const canvas = canvasRef.current;
           if (!canvas) return;
 
-          const stream = canvas.captureStream(60); // 60 FPS Video Stream
+          const stream = canvas.captureStream(60); // 60 FPS
           const chunks = [];
 
-          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
           recorder.ondataavailable = (e) => chunks.push(e.data);
           recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
@@ -194,13 +215,6 @@
           mediaRecorderRef.current = recorder;
           recorder.start();
           setIsRecording(true);
-
-          // Auto-stop after 10 seconds for standard short length
-          setTimeout(() => {
-            if (recorder.state === 'recording') {
-              recorder.stop();
-            }
-          }, 10000);
         };
 
         const stopRecording = () => {
@@ -210,21 +224,51 @@
         };
 
         return (
-          <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center p-6">
+          <div className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center">
+            {/* Hidden video tag supplying background frames */}
+            <video
+              ref={videoRef}
+              src={selectedVideoUrl}
+              loop
+              muted
+              playsInline
+              autoPlay
+              crossOrigin="anonymous"
+              className="hidden"
+            />
+
             <header className="mb-6 text-center">
               <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
-                Quranic Reflections Studio
+                Quranic Video Studio
               </h1>
               <p className="text-slate-400 text-sm mt-1">
-                Create & Export 9:16 Shorts Directly in Your Browser
+                Full Surah Display • Pexels Backgrounds • Direct 720p Download
               </p>
             </header>
 
-            <div className="flex flex-col lg:flex-row gap-8 items-center justify-center max-w-5xl w-full">
-              {/* Controls Panel */}
-              <div className="w-full lg:w-80 bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col gap-4">
-                <h2 className="text-lg font-semibold border-b border-slate-800 pb-2">Video Settings</h2>
+            {/* Mode Selector */}
+            <div className="flex gap-4 mb-6 bg-slate-900 p-1.5 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setMode('shorts')}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${
+                  mode === 'shorts' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Shorts (9:16 Portrait)
+              </button>
+              <button
+                onClick={() => setMode('recitation')}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${
+                  mode === 'recitation' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Recitation (16:9 Landscape)
+              </button>
+            </div>
 
+            <div className="flex flex-col lg:flex-row gap-8 items-start justify-center max-w-6xl w-full">
+              {/* Left Control Panel */}
+              <div className="w-full lg:w-96 bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col gap-5">
                 <div>
                   <label className="text-xs text-slate-400 block mb-1">Select Surah</label>
                   <select
@@ -232,74 +276,97 @@
                     onChange={(e) => setSurahNum(Number(e.target.value))}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-sky-500 outline-none"
                   >
-                    <option value={1}>1. Al-Fatihah</option>
+                    <option value={1}>1. Al-Fatihah (7 Verses)</option>
                     <option value={36}>36. Ya-Sin</option>
                     <option value={55}>55. Ar-Rahman</option>
                     <option value={67}>67. Al-Mulk</option>
-                    <option value={112}>112. Al-Ikhlas</option>
-                    <option value={113}>113. Al-Falaq</option>
-                    <option value={114}>114. An-Nas</option>
+                    <option value={108}>108. Al-Kawthar (3 Verses)</option>
+                    <option value={112}>112. Al-Ikhlas (4 Verses)</option>
+                    <option value={113}>113. Al-Falaq (5 Verses)</option>
+                    <option value={114}>114. An-Nas (6 Verses)</option>
                   </select>
                 </div>
 
+                {/* Pexels Background Picker */}
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">Select Verse</label>
-                  <select
-                    value={selectedVerseIndex}
-                    onChange={(e) => setSelectedVerseIndex(Number(e.target.value))}
-                    disabled={loading || verses.length === 0}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-sky-500 outline-none disabled:opacity-50"
-                  >
-                    {verses.map((v, idx) => (
-                      <option key={v.id} value={idx}>
-                        Verse {v.verse_key}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="text-xs text-slate-400 block mb-1">Search Pexels Videos</label>
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-sky-500"
+                    />
+                    <button
+                      onClick={fetchPexelsVideos}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg"
+                    >
+                      Search
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-1">
+                    {pexelsVideos.map((vid) => {
+                      const file = vid.video_files.find(f => f.height === 720 || f.width === 720) || vid.video_files[0];
+                      return (
+                        <img
+                          key={vid.id}
+                          src={vid.image}
+                          onClick={() => setSelectedVideoUrl(file.link)}
+                          className={`w-full h-16 object-cover rounded-lg cursor-pointer border-2 transition ${
+                            selectedVideoUrl === file.link ? 'border-sky-500 scale-95' : 'border-transparent opacity-70 hover:opacity-100'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="pt-2">
+                {/* Record and Export Controls */}
+                <div className="pt-2 border-t border-slate-800 flex flex-col gap-3">
                   {!isRecording ? (
                     <button
                       onClick={startRecording}
                       className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 font-semibold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
                     >
                       <span className="w-3 h-3 rounded-full bg-red-500"></span>
-                      Record 10s Short
+                      Start Recording 720p Video
                     </button>
                   ) : (
                     <button
                       onClick={stopRecording}
                       className="w-full py-3 bg-red-600 hover:bg-red-500 font-semibold rounded-xl transition shadow-lg animate-pulse"
                     >
-                      Recording... (Click to Stop)
+                      Stop Recording
                     </button>
                   )}
-                </div>
 
-                {recordedUrl && (
-                  <div className="pt-2 border-t border-slate-800">
+                  {recordedUrl && (
                     <a
                       href={recordedUrl}
-                      download={`Quran_Short_${surahNum}_${currentVerse.verse_key}.webm`}
-                      className="w-full block text-center py-2.5 bg-emerald-600 hover:bg-emerald-500 font-semibold rounded-xl transition text-sm"
+                      download={`Quran_${mode}_Surah_${surahNum}_720p.webm`}
+                      className="w-full text-center py-2.5 bg-emerald-600 hover:bg-emerald-500 font-semibold rounded-xl transition text-sm"
                     >
-                      Download Recorded Short
+                      Download Ready Video
                     </a>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              {/* Live Canvas Preview Frame */}
+              {/* Live 720p Canvas Preview */}
               <div className="flex flex-col items-center">
                 <canvas
                   ref={canvasRef}
-                  width={1080}
-                  height={1920}
-                  className="w-[320px] h-[568px] rounded-2xl shadow-2xl border border-slate-800"
+                  width={canvasWidth}
+                  height={canvasHeight}
+                  style={{
+                    width: mode === 'shorts' ? '320px' : '568px',
+                    height: mode === 'shorts' ? '568px' : '320px'
+                  }}
+                  className="rounded-2xl shadow-2xl border border-slate-800 bg-black"
                 />
                 <span className="text-xs text-slate-500 mt-2">
-                  Live Preview • Canvas Scale (1080x1920 Resolution)
+                  Live Preview • Output Native Resolution ({canvasWidth}x{canvasHeight}p)
                 </span>
               </div>
             </div>
